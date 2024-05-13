@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Athena Spark on Amazon Athena Workshop.</title>
+    <link>/3-athena-spark/</link>
+    <description>Recent content in Athena Spark on Amazon Athena Workshop.</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    <atom:link href="/3-athena-spark/index.xml" rel="self" type="application/rss+xml" />
+  </channel>
+</rss>

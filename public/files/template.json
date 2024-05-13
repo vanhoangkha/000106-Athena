@@ -1,0 +1,411 @@
+{
+  "Description": "CloudFormation template to create Amazon Athena Spark workshop resources",
+  "Mappings": {
+    "SubnetConfig": {
+      "VPC": {
+        "CIDR": "10.1.0.0/16"
+      },
+      "PublicOne": {
+        "CIDR": "10.1.0.0/24"
+      },
+      "PublicTwo": {
+        "CIDR": "10.1.1.0/24"
+      },
+      "Private": {
+        "CIDR": "10.1.2.0/24"
+      }
+    },
+    "Constants": {
+      "EC2InstanceType": {
+        "Name": "t2.small"
+      },
+      "AutoHibernateTimeout": {
+        "Name": 30
+      }
+    }
+  },
+  "Resources": {
+    "AthenaSparkVPC": {
+      "Type": "AWS::EC2::VPC",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "VPC",
+            "CIDR"
+          ]
+        },
+        "InstanceTenancy": "default",
+        "EnableDnsSupport": "true",
+        "EnableDnsHostnames": "true",
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-Workshop-VPC"
+          }
+        ]
+      }
+    },
+    "PrivateSubnet": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "Private",
+            "CIDR"
+          ]
+        },
+        "MapPublicIpOnLaunch": "true",
+        "AvailabilityZone": {
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-Workshop-PrivateSubnet"
+          }
+        ]
+      }
+    },
+    "PublicSubnetOne": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "PublicOne",
+            "CIDR"
+          ]
+        },
+        "MapPublicIpOnLaunch": "true",
+        "AvailabilityZone": {
+          "Fn::Select": [
+            0,
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-Workshop-PublicSubnetOne"
+          }
+        ]
+      }
+    },
+    "PublicSubnetTwo": {
+      "Type": "AWS::EC2::Subnet",
+      "Properties": {
+        "CidrBlock": {
+          "Fn::FindInMap": [
+            "SubnetConfig",
+            "PublicTwo",
+            "CIDR"
+          ]
+        },
+        "MapPublicIpOnLaunch": "true",
+        "AvailabilityZone": {
+          "Fn::Select": [
+            1,
+            {
+              "Fn::GetAZs": {
+                "Ref": "AWS::Region"
+              }
+            }
+          ]
+        },
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-Workshop-PublicSubnetTwo"
+          }
+        ]
+      }
+    },
+    "InternetGateway": {
+      "Type": "AWS::EC2::InternetGateway",
+      "Properties": {
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-Workshop-IG"
+          }
+        ]
+      }
+    },
+    "VPCGatewayAttachment": {
+      "Type": "AWS::EC2::VPCGatewayAttachment",
+      "Properties": {
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        },
+        "InternetGatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "InternetGatewayRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        }
+      }
+    },
+    "InternetGatewayRoute": {
+      "Type": "AWS::EC2::Route",
+      "DependsOn": "VPCGatewayAttachment",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "InternetGatewayRouteTable"
+        },
+        "GatewayId": {
+          "Ref": "InternetGateway"
+        }
+      }
+    },
+    "PublicSubnetOneRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "InternetGatewayRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "PublicSubnetOne"
+        }
+      }
+    },
+    "PublicSubnetTwoRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "InternetGatewayRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "PublicSubnetTwo"
+        }
+      }
+    },
+    "NATGatewayAttachment": {
+      "Type": "AWS::EC2::EIP",
+      "DependsOn": "VPCGatewayAttachment",
+      "Properties": {
+        "Domain": "vpc"
+      }
+    },
+    "NATGateway": {
+      "Type": "AWS::EC2::NatGateway",
+      "Properties": {
+        "SubnetId": {
+          "Ref": "PublicSubnetOne"
+        },
+        "AllocationId": {
+          "Fn::GetAtt": [
+            "NATGatewayAttachment",
+            "AllocationId"
+          ]
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-NAT-Gateway"
+          }
+        ]
+      }
+    },
+    "NATGatewayRouteTable": {
+      "Type": "AWS::EC2::RouteTable",
+      "Properties": {
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        },
+        "Tags": [
+          {
+            "Key": "Name",
+            "Value": "Athena-Spark-NAT-RouteTable"
+          }
+        ]
+      }
+    },
+    "NATGatewayRoute": {
+      "Type": "AWS::EC2::Route",
+      "Properties": {
+        "DestinationCidrBlock": "0.0.0.0/0",
+        "RouteTableId": {
+          "Ref": "NATGatewayRouteTable"
+        },
+        "NatGatewayId": {
+          "Ref": "NATGateway"
+        }
+      }
+    },
+    "PrivateSubnetRouteTableAssociation": {
+      "Type": "AWS::EC2::SubnetRouteTableAssociation",
+      "Properties": {
+        "RouteTableId": {
+          "Ref": "NATGatewayRouteTable"
+        },
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        }
+      }
+    },
+    "S3Endpoint": {
+      "Type": "AWS::EC2::VPCEndpoint",
+      "Properties": {
+        "PolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Action": "*",
+              "Principal": "*",
+              "Resource": "*"
+            }
+          ]
+        },
+        "RouteTableIds": [
+          {
+            "Ref": "NATGatewayRouteTable"
+          },
+          {
+            "Ref": "InternetGatewayRouteTable"
+          }
+        ],
+        "ServiceName": {
+          "Fn::Sub": "com.amazonaws.${AWS::Region}.s3"
+        },
+        "VpcId": {
+          "Ref": "AthenaSparkVPC"
+        }
+      }
+    },
+    "AthenaSparkWorkshopBucket": {
+      "Type": "AWS::S3::Bucket",
+      "Properties": {
+        "BucketName": {
+          "Fn::Join": [
+            "-",
+            [
+              "athena-spark-workshop",
+              {
+                "Ref": "AWS::AccountId"
+              }
+            ]
+          ]
+        }
+      }
+    },
+    "AWSCloud9SSMAccessRole": {
+      "Type": "AWS::IAM::Role",
+      "Properties": {
+        "AssumeRolePolicyDocument": {
+          "Version": "2012-10-17",
+          "Statement": [
+            {
+              "Effect": "Allow",
+              "Principal": {
+                "Service": [
+                  "cloud9.amazonaws.com",
+                  "ec2.amazonaws.com"
+                ]
+              },
+              "Action": [
+                "sts:AssumeRole"
+              ]
+            }
+          ]
+        },
+        "Description": "Service linked role for AWS Cloud9",
+        "Path": "/service-role/",
+        "ManagedPolicyArns": [
+          "arn:aws:iam::aws:policy/AWSCloud9SSMInstanceProfile"
+        ],
+        "RoleName": "AWSCloud9SSMAccessRole"
+      }
+    },
+    "AWSCloud9SSMInstanceProfile": {
+      "Type": "AWS::IAM::InstanceProfile",
+      "Properties": {
+        "InstanceProfileName": "AWSCloud9SSMInstanceProfile",
+        "Path": "/cloud9/",
+        "Roles": [
+          {
+            "Ref": "AWSCloud9SSMAccessRole"
+          }
+        ]
+      }
+    },
+    "C9IDE": {
+      "Type": "AWS::Cloud9::EnvironmentEC2",
+      "DependsOn": "AWSCloud9SSMAccessRole",
+      "Properties": {
+        "Name": "AthenaPythonLibraries",
+        "Description": "Cloud9 IDE to prepare the python virtual libraries",
+        "AutomaticStopTimeMinutes": {
+          "Fn::FindInMap": [
+            "Constants",
+            "AutoHibernateTimeout",
+            "Name"
+          ]
+        },
+        "ImageId": "amazonlinux-2023-x86_64",
+        "SubnetId": {
+          "Ref": "PrivateSubnet"
+        },
+        "InstanceType": {
+          "Fn::FindInMap": [
+            "Constants",
+            "EC2InstanceType",
+            "Name"
+          ]
+        },
+        "ConnectionType": "CONNECT_SSM"
+      }
+    }
+  },
+  "Outputs": {
+    "AthenaSparkWorkshopBucketName": {
+      "Description": "Athena Spark Workshop Bucket Name",
+      "Value": {
+        "Ref": "AthenaSparkWorkshopBucket"
+      }
+    },
+    "AthenaQueryResultLocation": {
+      "Description": "Athena Query Result Location",
+      "Value": {
+        "Fn::Join": [
+          "",
+          [
+            "s3://",
+            {
+              "Ref": "AthenaSparkWorkshopBucket"
+            },
+            "/athena-results/"
+          ]
+        ]
+      }
+    }
+  }
+}
